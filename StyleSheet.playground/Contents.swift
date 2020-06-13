@@ -1,25 +1,18 @@
 import UIKit
 import PlaygroundSupport
 
+typealias Style<T: UIView> = (T) -> Void
+
 // MARK: - Foundation
 enum StyleSheet {
     enum Mixins {}
 }
 
-precedencegroup CompositionPrecedence {
-    associativity: left
-    higherThan: AssignmentPrecedence
-}
-
-infix operator >>>: CompositionPrecedence
-
-func >>> <T: UIView>(
-    lhs: @escaping (T) -> Void,
-    rhs: @escaping (T) -> Void
-) -> (T) -> Void {
-    return {
-        lhs($0)
-        rhs($0)
+func concat<T: UIView>(_ styles: [Style<T>]) -> Style<T> {
+    return { view in
+        styles.forEach {
+            $0(view)
+        }
     }
 }
 
@@ -29,14 +22,14 @@ extension StyleSheet.Mixins {
     static func border<T: UIView>(
         width: CGFloat? = nil,
         color: UIColor? = nil
-    ) -> (T) -> Void {
+    ) -> Style<T> {
         return { view in
             width.map { view.layer.borderWidth = $0 }
             color.map { view.layer.borderColor = $0.cgColor }
         }
     }
 
-    static func cornerRadius<T: UIView>(value: CGFloat) -> (T) -> Void {
+    static func cornerRadius<T: UIView>(value: CGFloat) -> Style<T> {
         return { view in
             view.layer.cornerRadius = value
         }
@@ -45,7 +38,7 @@ extension StyleSheet.Mixins {
     static func base<T: UIView>(
         backgroundColor: UIColor? = nil,
         clipsToBounds: Bool? = nil
-    ) -> (T) -> Void {
+    ) -> Style<T> {
         return { view in
             backgroundColor.map { view.backgroundColor = $0 }
             clipsToBounds.map { view.clipsToBounds = $0}
@@ -55,7 +48,7 @@ extension StyleSheet.Mixins {
     static func button<T: UIButton>(
         titleColor: UIColor,
         for state: UIControl.State
-    ) -> (T) -> Void {
+    ) -> Style<T> {
         return { button in
             button.setTitleColor(titleColor, for: state)
         }
@@ -65,12 +58,12 @@ extension StyleSheet.Mixins {
 // MARK: - Helper
 
 protocol Styleable {
-    associatedtype StyledElement
-    func withStyle(_ f: (StyledElement) -> Void) -> StyledElement
+    associatedtype StyledElement: UIView
+    func withStyle(_ f: Style<StyledElement>) -> StyledElement
 }
 
-extension Styleable {
-    func withStyle(_ f: (Self) -> Void) -> Self {
+extension Styleable where Self: UIView {
+    func withStyle(_ f: Style<Self>) -> Self {
         f(self)
         return self
     }
@@ -80,33 +73,85 @@ extension UIView: Styleable {}
 // MARK: - Button styles
 
 extension StyleSheet {
-    static let baseButtonStyle: (UIButton) -> Void =
-        Mixins.base(backgroundColor: .white, clipsToBounds: true)
-            >>> Mixins.border(width: 2, color: .black)
-            >>> Mixins.cornerRadius(value: 8)
-            >>> Mixins.button(titleColor: .black, for: .normal)
-            >>> Mixins.button(titleColor: .gray, for: .highlighted)
+    static let baseButtonStyle: Style<UIButton> = concat([
+        Mixins.base(backgroundColor: .white, clipsToBounds: true),
+        Mixins.border(width: 2, color: .black),
+        Mixins.cornerRadius(value: 8),
+        Mixins.button(titleColor: .black, for: .normal),
+        Mixins.button(titleColor: .gray, for: .highlighted)
+    ])
 
-    static let primaryButtonStyle: (UIButton) -> Void =
-        baseButtonStyle
-            >>> StyleSheet.Mixins.border(color: .black)
+    static let primaryButtonStyle: Style<UIButton> = concat([
+            baseButtonStyle,
+            StyleSheet.Mixins.border(color: .black)
+    ])
 
-
-    static let secondaryButtonStyle: (UIButton) -> Void =
-        baseButtonStyle
-            >>> StyleSheet.Mixins.base(backgroundColor: .clear)
-            >>> StyleSheet.Mixins.border(width: 0)
-            >>> StyleSheet.Mixins.button(titleColor: .blue, for: .normal)
+    static let secondaryButtonStyle: Style<UIButton> = concat([
+        baseButtonStyle,
+        StyleSheet.Mixins.base(backgroundColor: .clear),
+        StyleSheet.Mixins.border(width: 0),
+        StyleSheet.Mixins.button(titleColor: .blue, for: .normal)
+    ])
 
 }
 
+class CustomOldSwitch: UISwitch {
+    enum Style {
+        case `default`
+        case custom1
+    }
+    private let style: Style
+
+    init(style: Style) {
+        self.style = style
+        super.init(frame: .zero)
+        addTarget(self, action: #selector(changeStyle(_:)), for: .valueChanged)
+        updateStyle()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func changeStyle(_ sender: CustomSwitch) {
+        updateStyle()
+    }
+
+    private func updateStyle() {
+        switch style {
+            case .default:
+                applyDefaultStyle()
+            case .custom1:
+                applyCustomStyle()
+        }
+    }
+
+    private func applyDefaultStyle() {
+        if isOn {
+            self.layer.borderWidth = 1
+        } else {
+            self.layer.borderWidth = 0
+        }
+    }
+
+    private func applyCustomStyle() {
+        if isOn {
+            self.layer.borderWidth = 1
+            self.backgroundColor = .white
+        } else {
+            self.layer.borderWidth = 0
+            self.backgroundColor = .gray
+        }
+    }
+}
+
 class CustomSwitch: UISwitch {
-    var onStyle: (CustomSwitch) -> Void = StyleSheet.Mixins.border(width: 1) {
+    var onStyle: Style<CustomSwitch> = StyleSheet.Mixins.border(width: 1) {
         didSet {
             changeStyle(self)
         }
     }
-    var offStyle: (CustomSwitch) -> Void = StyleSheet.Mixins.border(width: 0) {
+    var offStyle: Style<CustomSwitch> = StyleSheet.Mixins.border(width: 0) {
         didSet {
             changeStyle(self)
         }
@@ -129,12 +174,15 @@ class CustomSwitch: UISwitch {
 
 class TestViewController: UIViewController {
     enum LocalStyles {
-        static let switchButtonStyle: (CustomSwitch) -> Void = {
-            $0.offStyle =
-                StyleSheet.Mixins.border(width: 0)
-                >>> StyleSheet.Mixins.base(backgroundColor: .gray)
-            $0.onStyle = StyleSheet.Mixins.border(width: 1)
-            >>> StyleSheet.Mixins.base(backgroundColor: .white)
+        static let switchButtonStyle: Style<CustomSwitch> = {
+            $0.offStyle = concat([
+                StyleSheet.Mixins.border(width: 0),
+                StyleSheet.Mixins.base(backgroundColor: .gray)
+            ])
+            $0.onStyle = concat([
+                StyleSheet.Mixins.border(width: 1),
+                StyleSheet.Mixins.base(backgroundColor: .white)
+            ])
         }
     }
 
@@ -147,9 +195,10 @@ class TestViewController: UIViewController {
         let secondaryButton = UIButton().withStyle(StyleSheet.secondaryButtonStyle)
         secondaryButton.setTitle("Secondary button", for: .normal)
 
-        let customSwitch = CustomSwitch().withStyle(LocalStyles.switchButtonStyle)
+        let custom1Switch = CustomSwitch().withStyle(LocalStyles.switchButtonStyle)
+        let custom2Switch = CustomOldSwitch(style: .custom1)
 
-        let container = UIStackView(arrangedSubviews: [primaryButton, secondaryButton, customSwitch])
+        let container = UIStackView(arrangedSubviews: [primaryButton, secondaryButton, custom1Switch, custom2Switch])
         container.axis = .vertical
         container.spacing = 10
         container.translatesAutoresizingMaskIntoConstraints = false
