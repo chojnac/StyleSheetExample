@@ -189,16 +189,24 @@ class TestViewController: UIViewController {
     override func loadView() {
         view = UIView()
         view.backgroundColor = .white
-        let primaryButton = UIButton().withStyle(StyleSheet.primaryButtonStyle)
+        let primaryButton = UIButton()
+            .withStyle(StyleSheet.primaryButtonStyle)
         primaryButton.setTitle("Primary button", for: .normal)
 
-        let secondaryButton = UIButton().withStyle(StyleSheet.secondaryButtonStyle)
+        let secondaryButton = UIButton()
+            .withStyle(StyleSheet.secondaryButtonStyle)
         secondaryButton.setTitle("Secondary button", for: .normal)
 
-        let custom1Switch = CustomSwitch().withStyle(LocalStyles.switchButtonStyle)
+        let custom1Switch = CustomSwitch()
+            .withStyle(LocalStyles.switchButtonStyle)
         let custom2Switch = CustomOldSwitch(style: .custom1)
 
-        let container = UIStackView(arrangedSubviews: [primaryButton, secondaryButton, custom1Switch, custom2Switch])
+        let container = UIStackView(arrangedSubviews: [
+            primaryButton,
+            secondaryButton,
+            custom1Switch,
+            custom2Switch
+        ])
         container.axis = .vertical
         container.spacing = 10
         container.translatesAutoresizingMaskIntoConstraints = false
